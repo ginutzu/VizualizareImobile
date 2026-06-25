@@ -1,5 +1,5 @@
 /* Vizualizare Imobile — service worker (app shell + CDN cache) */
-const CACHE = "vizimobile-v2";
+const CACHE = "vizimobile-v12";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png"];
 const CDN = ["cdnjs.cloudflare.com","unpkg.com","cdn.jsdelivr.net","fonts.googleapis.com","fonts.gstatic.com"];
 
