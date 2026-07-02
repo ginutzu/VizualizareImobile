@@ -191,6 +191,9 @@
     <div class="group">
       <p class="lbl">Fundal (background)</p>
       <select class="bm" id="basemap-select" aria-label="Sursă fundal">
+        <optgroup label="ANCPI — nativ Stereo70">
+          <option value="ancpi:mozvt">Ortofoto ANCPI (Mozaic)</option>
+        </optgroup>
         <optgroup label="Global — reproiectat în Stereo70">
           <option value="xyz:sat" selected>Satelit (Esri World Imagery)</option>
           <option value="xyz:osm">OpenStreetMap</option>
@@ -303,7 +306,31 @@ var ReprojLayer=L.GridLayer.extend({createTile:function(coords,done){
 var MOZAIC_WMS="https://geoportal.ancpi.ro/maps/services/Ortofoto/Mozaic/MapServer/WMSServer";
 var MOZAIC_CACHE="https://geoportal.ancpi.ro/maps/rest/services/Ortofoto/Mozaic/MapServer";
 var TOPO_CACHE="https://geoportal.ancpi.ro/maps/rest/services/ANCPI/TopRo5_Topo_3844/MapServer";
+/* Ortofoto ANCPI Mozaic_vt: cache nativ EPSG:3844, aceleași rezoluții (LOD 0–16),
+   dar cu ALTĂ origine a grilei → compunem max. 2×2 tile-uri sursă cu offset de pixeli. */
+var MOZVT="https://geoportal.ancpi.ro/maps/rest/services/Ortofoto/Mozaic_vt/MapServer/tile/",
+    MOZVT_O=[-30221900,31204100],MOZVT_MAXN=16;
+var MozaicVT=L.GridLayer.extend({createTile:function(coords,done){
+  var tile=document.createElement("canvas");tile.width=256;tile.height=256;
+  var ctx=tile.getContext("2d");ctx.imageSmoothingQuality="high";
+  var mp=this._map;if(!mp){done(null,tile);return tile;}
+  var z=coords.z,zn=Math.min(z,MOZVT_MAXN),res=RES[z],resN=RES[zn],S=256*res,SN=256*resN;
+  var p0=crs.project(mp.unproject(coords.scaleBy(L.point(256,256)),z));
+  var c0=Math.floor((p0.x-MOZVT_O[0])/SN),c1=Math.floor((p0.x+S-0.001-MOZVT_O[0])/SN),
+      r0=Math.floor((MOZVT_O[1]-p0.y)/SN),r1=Math.floor((MOZVT_O[1]-(p0.y-S)-0.001)/SN);
+  var jobs=[],loaded=0;
+  for(var rr=r0;rr<=r1;rr++)for(var cc=c0;cc<=c1;cc++){(function(rr,cc){
+    if(rr<0||cc<0)return;
+    jobs.push(new Promise(function(res2){var im=new Image();
+      im.onload=function(){var tx=MOZVT_O[0]+cc*SN,ty=MOZVT_O[1]-rr*SN,
+        dx=(tx-p0.x)/res,dy=(p0.y-ty)/res,ds=256*resN/res;
+        try{ctx.drawImage(im,dx,dy,ds,ds);loaded++;}catch(e){}res2();};
+      im.onerror=function(){res2();};
+      im.src=MOZVT+zn+"/"+rr+"/"+cc;}));})(rr,cc);}
+  Promise.all(jobs).then(function(){done(loaded>0?null:new Error("gol"),tile);}).catch(function(){done(null,tile);});
+  return tile;}});
 function makeBase(key){
+  if(key==="ancpi:mozvt")return new MozaicVT({maxZoom:19,attribution:"© ANCPI · Ortofoto Mozaic"});
   if(key==="ancpi:ortho-wms")return L.tileLayer.wms(MOZAIC_WMS+"?",{layers:"0",format:"image/jpeg",version:"1.1.1",transparent:false,tileSize:512,maxZoom:19,attribution:"© ANCPI"});
   if(key==="ancpi:ortho-cache")return L.tileLayer(MOZAIC_CACHE+"/tile/{z}/{y}/{x}",{tileSize:256,maxNativeZoom:16,maxZoom:19,attribution:"© ANCPI"});
   if(key==="ancpi:topo-cache")return L.tileLayer(TOPO_CACHE+"/tile/{z}/{y}/{x}",{tileSize:256,maxNativeZoom:16,maxZoom:19,attribution:"© ANCPI"});
